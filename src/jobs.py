@@ -1,59 +1,63 @@
-# src/jobs.py
-
-import redis
-import json
-import matplotlib.pyplot as plt
-import base64
+import os
 import io
+import json
+import base64
+import redis
+import matplotlib
+matplotlib.use("Agg")          # head‑less backend
+import matplotlib.pyplot as plt
 
-# Connect to Redis
-r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_DB   = int(os.getenv("REDIS_DB", 0))
+
+r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB,
+                decode_responses=True)
 
 RAW_DATA_KEY = "raw_data"
 
+
+def _safe_float(value):
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
 def load_data():
-    """Load the raw data from Redis."""
-    raw_data = r.get(RAW_DATA_KEY)
-    if not raw_data:
-        raise ValueError("No dataset found in Redis.")
-    return json.loads(raw_data)
+    data_raw = r.get(RAW_DATA_KEY)
+    if data_raw is None:
+        raise RuntimeError("Dataset not loaded; POST /data first.")
+    return json.loads(data_raw)
+
 
 def extract_fields(data, x_field, y_field):
-    """Extract x and y values from dataset."""
-    x_vals, y_vals = [], []
-
+    xs, ys = [], []
     for row in data:
-        try:
-            x = float(row.get(x_field, 'nan'))
-            y = float(row.get(y_field, 'nan'))
-            if not (x is None or y is None):
-                x_vals.append(x)
-                y_vals.append(y)
-        except:
-            continue
+        x, y = _safe_float(row.get(x_field)), _safe_float(row.get(y_field))
+        if x is not None and y is not None:
+            xs.append(x)
+            ys.append(y)
+    if not xs:
+        raise ValueError(f"No numeric data for {x_field}/{y_field}.")
+    return xs, ys
 
-    if not x_vals or not y_vals:
-        raise ValueError("No valid x/y data points found.")
 
-    return x_vals, y_vals
-
-def generate_scatter_plot(x_vals, y_vals, x_label, y_label, title=None):
-    """Generate and return a scatter plot image as base64."""
+def generate_scatter_plot(xs, ys, x_lbl, y_lbl, title=None):
     fig, ax = plt.subplots()
-    ax.scatter(x_vals, y_vals, alpha=0.7)
-    ax.set_xlabel(x_label)
-    ax.set_ylabel(y_label)
-    ax.set_title(title or f"{y_label} vs {x_label}")
-
-    # Encode to base64
-    img_buf = io.BytesIO()
-    plt.savefig(img_buf, format='png')
+    ax.scatter(xs, ys, alpha=0.7)
+    ax.set_xlabel(x_lbl)
+    ax.set_ylabel(y_lbl)
+    ax.set_title(title or f"{y_lbl} vs {x_lbl}")
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
     plt.close(fig)
-    img_buf.seek(0)
-    return base64.b64encode(img_buf.read()).decode('utf-8')
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode()
 
-def run_job(x_field, y_field):
-    """Main callable for the worker: runs an analysis job."""
+
+def run_job(x_field: str, y_field: str) -> str:
     data = load_data()
-    x_vals, y_vals = extract_fields(data, x_field, y_field)
-    return generate_scatter_plot(x_vals, y_vals, x_field, y_field)
+    xs, ys = extract_fields(data, x_field, y_field)
+    return generate_scatter_plot(xs, ys, x_field, y_field)

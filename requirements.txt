@@ -1,5 +1,5 @@
-flask
-redis
-matplotlib
-pytest
+flask>=2.3
+redis>=5.0
+matplotlib>=3.8
+pytest>=7.4
 pyyaml

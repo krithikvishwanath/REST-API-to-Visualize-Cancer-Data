@@ -1,6 +1,6 @@
 # === Configuration ===
 DOCKER_USER = your-dockerhub-username
-FLASK_IMAGE = $(DOCKER_USER)/flask-worker-app
+FLASK_IMAGE = krithikv/flask-worker-app
 TAG = latest
 
 # === Docker Build & Push ===

@@ -1,87 +1,87 @@
-# src/worker.py
-
-import redis
-import json
-import time
-import matplotlib.pyplot as plt
-import base64
+import os
 import io
-import os, redis
+import json
+import base64
+import redis
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_DB   = int(os.getenv("REDIS_DB", 0))
 
-r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB,
+                decode_responses=True)
 
 RAW_DATA_KEY = "raw_data"
-JOB_QUEUE = "job_queue"
-JOB_STATUS = "job_status"
-JOB_RESULT = "job_result"
+JOB_QUEUE    = "job_queue"
+JOB_STATUS   = "job_status"
+JOB_RESULT   = "job_result"
+
+
+def _safe_float(val):
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
 
 def generate_plot(x_field, y_field):
-    """Generate a plot from the stored dataset."""
-    raw_data = r.get(RAW_DATA_KEY)
-    if not raw_data:
-        raise ValueError("No dataset found.")
-    
-    data = json.loads(raw_data)
+    data_raw = r.get(RAW_DATA_KEY)
+    if data_raw is None:
+        raise RuntimeError("Dataset not loaded.")
+    data = json.loads(data_raw)
 
-    x_vals = []
-    y_vals = []
-
+    xs, ys = [], []
     for row in data:
-        try:
-            x = float(row.get(x_field, 'nan'))
-            y = float(row.get(y_field, 'nan'))
-            if not (x is None or y is None):
-                x_vals.append(x)
-                y_vals.append(y)
-        except:
-            continue
-
-    if not x_vals or not y_vals:
-        raise ValueError("No valid data points to plot.")
+        x, y = _safe_float(row.get(x_field)), _safe_float(row.get(y_field))
+        if x is not None and y is not None:
+            xs.append(x)
+            ys.append(y)
+    if not xs:
+        raise ValueError("No valid points to plot.")
 
     fig, ax = plt.subplots()
-    ax.scatter(x_vals, y_vals, alpha=0.7)
+    ax.scatter(xs, ys, alpha=0.7)
     ax.set_xlabel(x_field)
     ax.set_ylabel(y_field)
-    ax.set_title(f'{y_field} vs {x_field}')
-
-    # Convert image to base64
-    img_buf = io.BytesIO()
-    plt.savefig(img_buf, format='png')
+    ax.set_title(f"{y_field} vs {x_field}")
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
     plt.close(fig)
-    img_buf.seek(0)
-    img_base64 = base64.b64encode(img_buf.read()).decode('utf-8')
-    return img_base64
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode()
 
-def process_job(job_data):
-    job_id = job_data.get("job_id")
-    x_field = job_data.get("x_field")
-    y_field = job_data.get("y_field")
+
+def process_job(job):
+    job_id = job.get("job_id")
+    x_field = job.get("x_field")
+    y_field = job.get("y_field")
 
     if not all([job_id, x_field, y_field]):
-        r.hset(JOB_STATUS, job_id, "failed: missing job fields")
+        r.hset(JOB_STATUS, job_id, "failed: missing fields")
         return
 
+    r.hset(JOB_STATUS, job_id, "processing")
     try:
-        r.hset(JOB_STATUS, job_id, "processing")
-        img_base64 = generate_plot(x_field, y_field)
-        r.hset(JOB_RESULT, job_id, img_base64)
+        img_b64 = generate_plot(x_field, y_field)
+        r.hset(JOB_RESULT, job_id, img_b64)
         r.hset(JOB_STATUS, job_id, "completed")
-    except Exception as e:
-        r.hset(JOB_STATUS, job_id, f"failed: {str(e)}")
+    except Exception as exc:
+        r.hset(JOB_STATUS, job_id, f"failed: {exc}")
+
 
 def main():
-    print("Worker started. Listening for jobs...")
+    print("Worker ready – waiting for jobs.")
     while True:
-        _, job_raw = r.blpop(JOB_QUEUE)  # blocking pop
+        _, raw = r.blpop(JOB_QUEUE)        # blocks until job arrives
         try:
-            job_data = json.loads(job_raw)
-            process_job(job_data)
+            process_job(json.loads(raw))
         except Exception as e:
-            print(f"Job failed to process: {str(e)}")
+            print(f"Job processing error: {e}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
