@@ -3,29 +3,29 @@ version: "3.9"
 services:
   redis:
     image: redis:alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
+    restart: unless-stopped
+    ports: ["6379:6379"]
+    volumes: [redis-data:/data]
 
   flask:
     build: .
     container_name: flask-api
-    ports:
-      - "5000:5000"
+    restart: unless-stopped
+    ports: ["5000:5000"]
     environment:
       - REDIS_HOST=redis
-    depends_on:
-      - redis
+      - KAGGLE_USERNAME=${KAGGLE_USERNAME}
+      - KAGGLE_KEY=${KAGGLE_KEY}
+    depends_on: [redis]
     command: ["python", "src/flask_api.py"]
 
   worker:
     build: .
     container_name: worker
+    restart: unless-stopped
     environment:
       - REDIS_HOST=redis
-    depends_on:
-      - redis
+    depends_on: [redis]
     command: ["python", "src/worker.py"]
 
 volumes:

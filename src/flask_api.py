@@ -1,123 +1,134 @@
-import os
-import io
-import uuid
-import json
-import base64
+import os, io, uuid, json, base64, subprocess, tempfile, zipfile, pandas as pd
 from flask import Flask, request, jsonify, send_file
 import redis
+import matplotlib          # ensure Agg when Flask plots (rare)
+matplotlib.use("Agg")
 
 
-# ────────────────────────────────────────────────────────────── #
-#  Application‑factory pattern keeps tests isolated & configurable
-# ────────────────────────────────────────────────────────────── #
+# ───────────────────────── helper utilities ─────────────────────────
+def _error(msg: str, code: int = 400):
+    return jsonify({"error": msg}), code
+
+
+def _fetch_csv_as_records(dataset: str, csv_name: str) -> list[dict]:
+    """
+    Download <dataset> from Kaggle, extract <csv_name>, return list‑of‑dicts.
+    Requires KAGGLE_USERNAME / KAGGLE_KEY env‑vars *or* ~/.kaggle/kaggle.json.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        subprocess.run(
+            ["kaggle", "datasets", "download", "-p", tmpdir, "-d", dataset],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        zips = list(os.scandir(tmpdir))
+        if not zips:
+            raise RuntimeError("Kaggle download produced no files.")
+        zip_path = zips[0].path
+        with zipfile.ZipFile(zip_path) as zf, zf.open(csv_name) as fh:
+            df = pd.read_csv(io.BytesIO(fh.read()))
+    return json.loads(df.to_json(orient="records"))
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
 
-    # ---- Redis connection ------------------------------------
-    REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-    REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-    REDIS_DB   = int(os.getenv("REDIS_DB", 0))
-    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB,
-                    decode_responses=True)
-    app.config["REDIS_CONN"] = r     # expose for tests
+    r = redis.Redis(
+        host=os.getenv("REDIS_HOST", "localhost"),
+        port=int(os.getenv("REDIS_PORT", 6379)),
+        db=int(os.getenv("REDIS_DB", 0)),
+        decode_responses=True,
+    )
+    app.config["REDIS_CONN"] = r
 
-    # ---- Logical table / key names ---------------------------
-    RAW_DATA_KEY = "raw_data"
-    JOB_QUEUE    = "job_queue"
-    JOB_STATUS   = "job_status"
-    JOB_RESULT   = "job_result"
+    RAW_DATA, J_QUEUE, J_STAT, J_RES = ("raw_data", "job_queue",
+                                        "job_status", "job_result")
 
-    # ---- Helpers ---------------------------------------------
-    def _error(msg: str, code: int = 400):
-        return jsonify({"error": msg}), code
-
-    # ---- Routes ----------------------------------------------
-    @app.route("/help", methods=["GET"])
+    # ── Help ────────────────────────────────────────────────────────
+    @app.route("/help")
     def help_page():
-        return jsonify({
-            "routes": {
-                "/help"             : "GET  – describe all routes",
-                "/data"             : "POST/GET/DELETE – upload, list or delete dataset",
-                "/data/<PatientID>" : "GET  – fetch a single record",
-                "/job"              : "POST – submit analysis job (x_field, y_field)",
-                "/job/<job_id>"     : "GET  – poll job status",
-                "/result/<job_id>"  : "GET  – download generated PNG"
-            }
+        return jsonify(routes={
+            "/help"            : "GET   – list routes",
+            "/data"            : "POST/GET/DELETE – upload / list / delete dataset",
+            "/data/<id>"       : "GET   – single record by PatientID",
+            "/data/load"       : "POST  – pull CSV from Kaggle (dataset,file)",
+            "/job"             : "POST  – submit job {'x_field','y_field'}",
+            "/job/<job_id>"    : "GET   – poll status",
+            "/result/<job_id>" : "GET   – fetch PNG result",
         })
 
-    # ── Dataset ------------------------------------------------
+    # ── DATA CRUD ───────────────────────────────────────────────────
     @app.route("/data", methods=["POST"])
     def upload_data():
-        # Accept “proper” JSON or try a best‑effort parse if header is missing
-        if request.is_json:
-            payload = request.get_json()
-        else:
-            try:
-                payload = json.loads(request.data)
-            except Exception:
-                return _error("Expected JSON list of records in body.")
+        body = request.get_json(silent=True)
+        if not isinstance(body, list):
+            return _error("Expected JSON list of records.")
+        r.set(RAW_DATA, json.dumps(body))
+        return jsonify(message=f"Uploaded {len(body)} records.")
 
-        if not isinstance(payload, list):
-            return _error("Expected a list[dict] representing the dataset.")
-
-        r.set(RAW_DATA_KEY, json.dumps(payload))
-        return jsonify({"message": f"Uploaded {len(payload)} records."})
+    @app.route("/data/load", methods=["POST"])
+    def load_from_kaggle():
+        info = request.get_json(silent=True) or {}
+        dataset, csv = info.get("dataset"), info.get("file")
+        if not (dataset and csv):
+            return _error("'dataset' and 'file' required.")
+        try:
+            records = _fetch_csv_as_records(dataset, csv)
+        except Exception as e:
+            return _error(f"Download failed: {e}", 500)
+        r.set(RAW_DATA, json.dumps(records))
+        return jsonify(message=f"Loaded {len(records)} rows from {dataset}/{csv}.")
 
     @app.route("/data", methods=["GET"])
-    def get_all_data():
-        data = r.get(RAW_DATA_KEY)
-        return jsonify(json.loads(data)) if data else jsonify([])
+    def list_data():
+        blob = r.get(RAW_DATA)
+        return jsonify(json.loads(blob)) if blob else jsonify([])
 
-    @app.route("/data/<patient_id>", methods=["GET"])
-    def get_single_record(patient_id):
-        data_raw = r.get(RAW_DATA_KEY)
-        if not data_raw:
+    @app.route("/data/<patient_id>")
+    def single_record(patient_id):
+        blob = r.get(RAW_DATA)
+        if blob is None:
             return _error("No dataset loaded.", 404)
-        for rec in json.loads(data_raw):
+        for rec in json.loads(blob):
             if str(rec.get("PatientID")) == str(patient_id):
                 return jsonify(rec)
         return _error("Record not found.", 404)
 
     @app.route("/data", methods=["DELETE"])
-    def delete_dataset():
-        r.delete(RAW_DATA_KEY)
-        return jsonify({"message": "Dataset deleted."})
+    def delete_data():
+        r.delete(RAW_DATA)
+        return jsonify(message="Dataset deleted.")
 
-    # ── Jobs ---------------------------------------------------
+    # ── JOBS ────────────────────────────────────────────────────────
     @app.route("/job", methods=["POST"])
     def submit_job():
-        payload = request.get_json(silent=True) or {}
-        if not {"x_field", "y_field"} <= payload.keys():
-            return _error("Fields 'x_field' and 'y_field' are required.")
-        job_id = str(uuid.uuid4())
-        payload["job_id"] = job_id
+        body = request.get_json(silent=True) or {}
+        if not {"x_field", "y_field"} <= body.keys():
+            return _error("Need 'x_field' and 'y_field'.")
+        jid = str(uuid.uuid4())
+        body["job_id"] = jid
+        r.hset(J_STAT, jid, "queued")
+        r.rpush(J_QUEUE, json.dumps(body))
+        return jsonify(job_id=jid, status="queued"), 202
 
-        r.hset(JOB_STATUS, job_id, "queued")
-        r.rpush(JOB_QUEUE, json.dumps(payload))
-        return jsonify({"job_id": job_id, "status": "queued"}), 202
+    @app.route("/job/<job_id>")
+    def job_status(job_id):
+        stat = r.hget(J_STAT, job_id)
+        return _error("Job not found.", 404) if stat is None else jsonify(job_id=job_id, status=stat)
 
-    @app.route("/job/<job_id>", methods=["GET"])
-    def poll_job(job_id):
-        status = r.hget(JOB_STATUS, job_id)
-        if status is None:
-            return _error("Job not found.", 404)
-        return jsonify({"job_id": job_id, "status": status})
-
-    @app.route("/result/<job_id>", methods=["GET"])
-    def download_result(job_id):
-        img_b64 = r.hget(JOB_RESULT, job_id)
+    @app.route("/result/<job_id>")
+    def job_result(job_id):
+        img_b64 = r.hget(J_RES, job_id)
         if img_b64 is None:
-            return _error("Result not available (job still running?)", 404)
+            return _error("Result not ready.", 404)
         img_bytes = base64.b64decode(img_b64)
-        return send_file(io.BytesIO(img_bytes),
-                         mimetype="image/png",
+        return send_file(io.BytesIO(img_bytes), mimetype="image/png",
                          download_name=f"result_{job_id}.png")
 
     return app
 
 
-# ── Allow “python src/flask_api.py” for local dev ──────────────
 app = create_app()
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))

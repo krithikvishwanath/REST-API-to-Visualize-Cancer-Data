@@ -1,5 +1,7 @@
 flask>=2.3
 redis>=5.0
 matplotlib>=3.8
+pandas>=2.2      # CSV → JSON helper
+kaggle>=1.6      # Kaggle CLI / API
 pytest>=7.4
 pyyaml
