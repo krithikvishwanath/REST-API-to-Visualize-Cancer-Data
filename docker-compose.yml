@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  flask:
+    build: .
+    container_name: flask-api
+    ports:
+      - "5000:5000"
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+    command: ["python", "src/flask_api.py"]
+
+  worker:
+    build: .
+    container_name: worker
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+    command: ["python", "src/worker.py"]
+
+volumes:
+  redis-data:
