@@ -12,6 +12,6 @@ def test_extract_fields_valid():
 
 
 def test_generate_scatter_plot_returns_base64():
-    b64 = jobs.generate_scatter_plot([1, 2], [3, 4], "x", "y")
+    b64 = jobs.generate_scatter([1, 2], [3, 4], "x", "y")
     # A Base‑64 PNG is typically a few KB, so > 100 chars is a safe sanity check
     assert isinstance(b64, str) and len(b64) > 100
