@@ -13,6 +13,7 @@ services:
     restart: unless-stopped
     ports: ["5000:5000"]
     environment:
+      - PYTHONPATH=/app          # make /app importable
       - REDIS_HOST=redis
       - KAGGLE_USERNAME=${KAGGLE_USERNAME}
       - KAGGLE_KEY=${KAGGLE_KEY}
@@ -24,6 +25,7 @@ services:
     container_name: worker
     restart: unless-stopped
     environment:
+      - PYTHONPATH=/app          # same here
       - REDIS_HOST=redis
     depends_on: [redis]
     command: ["python", "src/worker.py"]
