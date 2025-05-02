@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-app-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-test
+  template:
+    metadata:
+      labels:
+        app: flask-test
+    spec:
+      containers:
+        - name: flask
+          image: your-dockerhub-username/your-flask-image:test
+          ports:
+            - containerPort: 5000
+          env:
+            - name: REDIS_HOST
+              value: "redis-test"
