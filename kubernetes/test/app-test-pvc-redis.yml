@@ -3,7 +3,9 @@ kind: PersistentVolumeClaim
 metadata:
   name: redis-pvc-test
 spec:
-  accessModes: ["ReadWriteOnce"]
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: cinder-csi      # ← key line
   resources:
     requests:
       storage: 1Gi
