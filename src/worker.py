@@ -11,7 +11,7 @@ r = redis.Redis(
 )
 RAW_DATA = "raw_data"
 J_QUEUE, J_STAT, J_RES = "job_queue", "job_status", "job_result"
-RAW_DATA_KEY = RAW_DATA       # tests import this name
+RAW_DATA_KEY = RAW_DATA       
 JOB_QUEUE     = J_QUEUE
 JOB_STATUS    = J_STAT
 JOB_RESULT    = J_RES
