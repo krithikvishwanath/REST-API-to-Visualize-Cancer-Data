@@ -1,7 +1,9 @@
 import os, io, json, base64, redis
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
+import pandas as pd
+import seaborn as sns          
+import numpy as np 
 
 r = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
