@@ -3,9 +3,8 @@ kind: PersistentVolumeClaim
 metadata:
   name: redis-pvc
 spec:
-  accessModes:
-    - ReadWriteOnce
+  accessModes: ["ReadWriteOnce"]
   resources:
     requests:
       storage: 1Gi
-  storageClassName: standard  # or leave out if using default storage class
+  storageClassName: standard          # adjust if cluster uses a different default

@@ -1,11 +1,13 @@
-import os, io, uuid, json, base64, subprocess, tempfile, zipfile, pandas as pd
+import os, io, uuid, json, base64, subprocess, tempfile, zipfile
+from datetime import datetime
+import pandas as pd
 from flask import Flask, request, jsonify, send_file
 import redis
-import matplotlib          # ensure Agg when Flask plots (rare)
+import matplotlib          # ensure head‑less on the server
 matplotlib.use("Agg")
 
 
-# ───────────────────────── helper utilities ─────────────────────────
+# ─────────────── helper utilities ────────────────
 def _error(msg: str, code: int = 400):
     return jsonify({"error": msg}), code
 
@@ -31,6 +33,7 @@ def _fetch_csv_as_records(dataset: str, csv_name: str) -> list[dict]:
     return json.loads(df.to_json(orient="records"))
 
 
+# ──────────────── factory ────────────────────────
 def create_app() -> Flask:
     app = Flask(__name__)
 
@@ -42,23 +45,30 @@ def create_app() -> Flask:
     )
     app.config["REDIS_CONN"] = r
 
-    RAW_DATA, J_QUEUE, J_STAT, J_RES = ("raw_data", "job_queue",
-                                        "job_status", "job_result")
+    RAW_DATA, J_QUEUE, J_STAT, J_RES = (
+        "raw_data",
+        "job_queue",
+        "job_status",
+        "job_result",
+    )
 
-    # ── Help ────────────────────────────────────────────────────────
+    # ── Help ──────────────────────────────────────
     @app.route("/help")
     def help_page():
-        return jsonify(routes={
-            "/help"            : "GET   – list routes",
-            "/data"            : "POST/GET/DELETE – upload / list / delete dataset",
-            "/data/<id>"       : "GET   – single record by PatientID",
-            "/data/load"       : "POST  – pull CSV from Kaggle (dataset,file)",
-            "/job"             : "POST  – submit job {'x_field','y_field'}",
-            "/job/<job_id>"    : "GET   – poll status",
-            "/result/<job_id>" : "GET   – fetch PNG result",
-        })
+        return jsonify(
+            routes={
+                "/help": "GET   – list routes",
+                "/data": "POST/GET/DELETE – upload / list / delete dataset",
+                "/data/<id>": "GET   – single record by PatientID",
+                "/data/load": "POST  – pull CSV from Kaggle (dataset,file)",
+                "/job": "POST  – submit job {'x_field','y_field'}",
+                "/job/<job_id>": "GET   – poll status",
+                "/result/<job_id>": "GET   – fetch PNG result",
+                "/admin/backup": "POST  – trigger an immediate Redis snapshot",
+            }
+        )
 
-    # ── DATA CRUD ───────────────────────────────────────────────────
+    # ── DATA CRUD ─────────────────────────────────
     @app.route("/data", methods=["POST"])
     def upload_data():
         body = request.get_json(silent=True)
@@ -78,7 +88,9 @@ def create_app() -> Flask:
         except Exception as e:
             return _error(f"Download failed: {e}", 500)
         r.set(RAW_DATA, json.dumps(records))
-        return jsonify(message=f"Loaded {len(records)} rows from {dataset}/{csv}.")
+        return jsonify(
+            message=f"Loaded {len(records)} rows from {dataset}/{csv}."
+        )
 
     @app.route("/data", methods=["GET"])
     def list_data():
@@ -100,7 +112,7 @@ def create_app() -> Flask:
         r.delete(RAW_DATA)
         return jsonify(message="Dataset deleted.")
 
-    # ── JOBS ────────────────────────────────────────────────────────
+    # ── JOBS ──────────────────────────────────────
     @app.route("/job", methods=["POST"])
     def submit_job():
         body = request.get_json(silent=True) or {}
@@ -115,7 +127,11 @@ def create_app() -> Flask:
     @app.route("/job/<job_id>")
     def job_status(job_id):
         stat = r.hget(J_STAT, job_id)
-        return _error("Job not found.", 404) if stat is None else jsonify(job_id=job_id, status=stat)
+        return (
+            _error("Job not found.", 404)
+            if stat is None
+            else jsonify(job_id=job_id, status=stat)
+        )
 
     @app.route("/result/<job_id>")
     def job_result(job_id):
@@ -123,8 +139,30 @@ def create_app() -> Flask:
         if img_b64 is None:
             return _error("Result not ready.", 404)
         img_bytes = base64.b64decode(img_b64)
-        return send_file(io.BytesIO(img_bytes), mimetype="image/png",
-                         download_name=f"result_{job_id}.png")
+        return send_file(
+            io.BytesIO(img_bytes),
+            mimetype="image/png",
+            download_name=f"result_{job_id}.png",
+        )
+
+    # ── ADMIN / BACKUP ────────────────────────────
+    @app.route("/admin/backup", methods=["POST"])
+    def manual_backup():
+        """
+        Trigger a background RDB snapshot (BGSAVE).  The main Redis container
+        writes it to /data/dump.rdb, after which the side‑car copy process
+        (defined in the Kubernetes manifest) archives the file.
+        """
+        try:
+            r.bgsave()
+        except redis.ResponseError as exc:
+            # Ignore "Background save already in progress"
+            if "in progress" in str(exc):
+                return _error("Backup already running – try later.", 409)
+            return _error(f"Backup failed: {exc}", 500)
+
+        ts = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        return jsonify(message=f"BGSAVE started at {ts}"), 202
 
     return app
 

@@ -14,8 +14,11 @@ spec:
     spec:
       containers:
         - name: worker
-          image: your-dockerhub-username/your-worker-image:latest
+          image: krithikv/flask-worker-app:latest
+          imagePullPolicy: IfNotPresent
           command: ["python", "src/worker.py"]
           env:
             - name: REDIS_HOST
               value: "redis"
+            - name: PYTHONUNBUFFERED
+              value: "1"

@@ -6,5 +6,7 @@ spec:
   selector:
     app: redis-test
   ports:
-    - protocol: TCP
+    - name: redis
+      protocol: TCP
       port: 6379
+      targetPort: 6379

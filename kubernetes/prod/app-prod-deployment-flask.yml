@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: flask-app
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: flask
@@ -14,9 +14,13 @@ spec:
     spec:
       containers:
         - name: flask
-          image: your-dockerhub-username/your-flask-image:latest
+          image: krithikv/flask-worker-app:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/flask_api.py"]
           ports:
             - containerPort: 5000
           env:
             - name: REDIS_HOST
               value: "redis"
+            - name: PYTHONUNBUFFERED
+              value: "1"

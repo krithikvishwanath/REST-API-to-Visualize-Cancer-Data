@@ -14,9 +14,13 @@ spec:
     spec:
       containers:
         - name: flask
-          image: your-dockerhub-username/your-flask-image:test
+          image: krithikv/flask-worker-app:test
+          imagePullPolicy: IfNotPresent
+          command: ["python", "src/flask_api.py"]
           ports:
             - containerPort: 5000
           env:
             - name: REDIS_HOST
               value: "redis-test"
+            - name: PYTHONUNBUFFERED
+              value: "1"
