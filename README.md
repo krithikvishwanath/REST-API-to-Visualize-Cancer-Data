@@ -88,13 +88,30 @@ The above are the standard configuration files. The following are all in the **`
  - Ingress rules for accessing test Flask API externally
  - Allows HTTP access for testing via browser or curl
 
+There is also a **`Makefile`**, which automates several common tasks as well as standardizes usage. 
+- **`make build`**
+Builds the Docker images for Flask API and worker containers
+Equivalent to running docker compose build
+- **`make up`**
+Starts all services (Flask, Redis, Worker) using Docker Compose
+Runs containers in foreground for active logging/debugging
+- **`make down`**
+Stops and removes all running containers and networks
+Safe reset if services need to be restarted
+- **`make logs`**
+Tails the combined logs from all running containers
+Useful for debugging background tasks or Flask requests
+- **`make test`**
+Runs all unit tests inside the containerized environment using pytest
+Ensures application logic is functioning correctly
+
 ## Software Diagram
 ![Software Diagram](Diagram.png)
 
 This illustrates the structure of the Cancer Dataset REST API Web Application, as well as the flow of data through the application. It shows where data originates, how it’s processed, where it’s stored, and how end users access it.
 
 ## Dataset Requirements
-The data used in this project is sourced from the Kaggle website. Specifically, it is the Orbital Ephemeris Message (OEM) data available in both plain text and XML formats. The XML format is what this script will run off of. 
+The data used in this project is sourced from the Kaggle website. Specifically, it is the Cancer Issue CSV (Comma Separated Value) file that this entire program is running off of.
 
 ## Deploying this App Using Docker Compose
 - Clone or download this Git repository.
@@ -148,8 +165,8 @@ Forward port to access locally or expose via Ingress:
 kubectl port-forward svc/flask-api 5000:5000
 ```
 
-## API Routes and Usage
-POST /submit
+## Example API Routes and Usage
+### POST /submit
 - Submits cancer data for processing and plot generation. Expects JSON with numeric features like radius_mean, texture_mean, etc.
 - Returns a job_id used to check job progress or retrieve the resulting graph.
 ```bash
@@ -162,7 +179,7 @@ POST /submit
 {"job_id": "abc123"}
 ```
   
-GET /status/<job_id>
+### GET /status/<job_id>
 - Returns the current status of a submitted job. Possible values include "queued", "in-progress", and "complete".
 ```bash
    curl http://localhost:5000/status/abc123
@@ -172,7 +189,7 @@ GET /status/<job_id>
    {"status": "queued"}
    ```  
 
-GET /result/<job_id>
+### GET /result/<job_id>
 - Returns the result of a completed job. For graph-generating jobs, this may return the filename or path of the generated plot.
 ```bash
    curl http://localhost:5000/result/abc123
@@ -185,7 +202,7 @@ An example response would be:
    curl http://localhost:5000/result/abc123 --output tumor_plot.png
    ```
 
-GET /graph/histogram
+### GET /graph/histogram
 - Generates a histogram of a specific feature (e.g., radius_mean) across the dataset.
 - Optional query parameters:
  - feature: The feature to graph (default is "radius_mean").
@@ -194,7 +211,7 @@ GET /graph/histogram
    curl "http://localhost:5000/graph/histogram?feature=radius_mean&bins=15" --output histogram.png
    ```
 
-GET /graph/scatter
+### GET /graph/scatter
 - Generates a scatter plot of two features (e.g., radius_mean vs. texture_mean).
 - Requires query parameters:
  - x: Feature on the x-axis.
