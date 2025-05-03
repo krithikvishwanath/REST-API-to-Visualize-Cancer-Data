@@ -33,60 +33,60 @@ The above are the standard configuration files. The following are all in the **`
 
 **`prod`**:
 - **`app-prod-deployment-flask.yml`**
- - Deploys Flask API server
- - Sets environment variables and container image
- - Exposes port 5000 for internal communication
+   - Deploys Flask API server
+   - Sets environment variables and container image
+   - Exposes port 5000 for internal communication
 - **`app-prod-deployment-worker.yml`**
- - Deploys background job worker
- - Listens to Redis queue
- - Does not expose ports
+   - Deploys background job worker
+   - Listens to Redis queue
+   - Does not expose ports
 - **`app-prod-deployment-redis.yml`**
- - Deploys Redis instance
- - Used for job queue and caching
- - Typically mounts persistent volume
+   - Deploys Redis instance
+   - Used for job queue and caching
+   - Typically mounts persistent volume
 - **`app-prod-service-flask.yml`**
- - Creates internal ClusterIP service for Flask
- - Used by Ingress or other pods to route to Flask
+   - Creates internal ClusterIP service for Flask
+   - Used by Ingress or other pods to route to Flask
 - **`app-prod-service-nodeport-flask.yml`**
- - Optional NodePort service for Flask
- - Exposes Flask on a static port across the cluster
- - Useful for testing without Ingress
+   - Optional NodePort service for Flask
+   - Exposes Flask on a static port across the cluster
+   - Useful for testing without Ingress
 - **`app-prod-service-redis.yml`**
- - ClusterIP service for Redis
- - Allows Flask and Worker to connect to Redis
+   - ClusterIP service for Redis
+   - Allows Flask and Worker to connect to Redis
 - **`app-prod-pvc-redis.yml`**
- - Allocates persistent volume claim for Redis
- - Ensures Redis data is retained after restarts
+   - Allocates persistent volume claim for Redis
+   - Ensures Redis data is retained after restarts
 - **`app-prod-ingress-flask.yml`**
- - Defines HTTP routing for external users to reach Flask
- - Uses host and path rules
- - Connects public traffic to internal Flask service
+   - Defines HTTP routing for external users to reach Flask
+   - Uses host and path rules
+   - Connects public traffic to internal Flask service
 
 **`test`**:
 - **`app-test-deployment-flask.yml`**
- - Same as prod but used in test environment
- - Enables safe validation before deploying to production
+   - Same as prod but used in test environment
+   - Enables safe validation before deploying to production
 - **`app-test-deployment-worker.yml`**
- - Worker deployment for test environment
- - Matches prod behavior for job processing
+   - Worker deployment for test environment
+   - Matches prod behavior for job processing
 - **`app-test-deployment-redis.yml`**
- - Redis deployment for test environment
- - Ensures isolation from production Redis
+   - Redis deployment for test environment
+   - Ensures isolation from production Redis
 - **`app-test-service-flask.yml`**
- - Internal service for test Flask pod
- - Accessible within cluster only
+   - Internal service for test Flask pod
+   - Accessible within cluster only
 - **`app-test-service-nodeport-flask.yml`**
- - Optional external access for Flask in test env
- - Exposes NodePort for manual testing
+   - Optional external access for Flask in test env
+   - Exposes NodePort for manual testing
 - **`app-test-service-redis.yml`**
- - ClusterIP service for Redis in test environment
- - Connects Flask and Worker in test cluster
+   - ClusterIP service for Redis in test environment
+   - Connects Flask and Worker in test cluster
 - **`app-test-pvc-redis.yml`**
- - Persistent volume claim for Redis in test
- - Can simulate production disk behavior
+   - Persistent volume claim for Redis in test
+   - Can simulate production disk behavior
 - **`app-test-ingress-flask.yml`**
- - Ingress rules for accessing test Flask API externally
- - Allows HTTP access for testing via browser or curl
+   - Ingress rules for accessing test Flask API externally
+   - Allows HTTP access for testing via browser or curl
 
 There is also a **`Makefile`**, which automates several common tasks as well as standardizes usage. 
 - **`make build`**
