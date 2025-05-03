@@ -106,7 +106,7 @@ Runs all unit tests inside the containerized environment using pytest
 Ensures application logic is functioning correctly
 
 ## Software Diagram
-![Software Diagram](Diagram.png)
+![Software Architecture Diagram](diagram.png)
 
 This illustrates the structure of the Cancer Dataset REST API Web Application, as well as the flow of data through the application. It shows where data originates, how it’s processed, where it’s stored, and how end users access it.
 
