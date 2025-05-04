@@ -166,6 +166,7 @@ kubectl port-forward svc/flask-api 5000:5000
 ```
 
 ## Example API Routes and Usage
+
 ### POST /submit
 - Submits cancer data for processing and plot generation. Expects JSON with numeric features like radius_mean, texture_mean, etc.
 - Returns a job_id used to check job progress or retrieve the resulting graph.
@@ -218,6 +219,24 @@ An example response would be:
  - y: Feature on the y-axis.
 ```bash
    curl "http://localhost:5000/graph/scatter?x=radius_mean&y=texture_mean" --output scatter.png
+   ```
+## Example Bar Chart Request
+### Load the Data
+```bash
+   curl -X POST http://localhost:5000/data/load -H "Content-Type: application/json" -d "{\"dataset\":\"preetigupta004/cancer-issue\",\"file\":\"cancer issue.csv\"}"
+   ```
+
+## To Actually Make the Bar Chart
+```bash
+   INPUT: curl -X POST http://localhost:5000/job -H "Content-Type: application/json" -d "{\"x_field\":\"X FIELD\",\"y_field\":\"Y FIELD\"}"
+   OUTPUT: {"job_id":"12345abc","status":"queued"}
+
+   INPUT: curl http://localhost:5000/job/<JOB_ID>
+   OUTPUT: {"job_id":"12345abc","status":"completed"}
+
+   INPUT: curl -o FILENAME.png http://localhost:5000/result/<JOB_ID>
+
+   INPUT: start FILENAME.png
    ```
 
 ### Running Containerized Unit Tests
