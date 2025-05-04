@@ -3,7 +3,7 @@
 ## Overview
 This project visualizes and processes cancer-related data from a public Kaggle dataset using a distributed system architecture composed of a Flask API frontend and a Redis-backed job queue system. It is designed to be deployed both locally (e.g., Jetstream) and on a Kubernetes cluster.
 
-The app receives user-submitted cancer data via a REST API, queues it with Redis, and spawns asynchronous workers to process the data and generate plots. These plots help explore patterns related to tumor malignancy and data distributions.
+The app receives user-submitted cancer data via a REST API, queues it with Redis, and spawns asynchronous workers to process the data and generate plots. These plots help explore patterns related to tumor malignancy and data distributions. We picked cancer data because we are interested in the medical field, as well as applying numerical/computational methods in order to analyze related data.
 
 ## Directory Contents
 The `The-Songs-of-Distant-Final` directory contains twenty-nine (29) files:
